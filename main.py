@@ -1,133 +1,252 @@
 import customtkinter as ctk
-import yfinance as yf
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import threading
+import time
+import day
+import hr
+from sklearn.metrics import confusion_matrix, classification_report
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tooltip import CreateToolTip
 
 
-# Fetch S&P 500 stock tickers (this may be manually sourced or scraped)
+loading_flag = False
+
 def get_sp500_tickers():
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     tables = pd.read_html(url)
     df = tables[0]
-    tickers = df['Symbol'].tolist()
-    return tickers
+    return df['Symbol'].tolist()
 
+def plot_confusion(y_true, y_pred, parent_frame, title="Confusion Matrix"):
+    cm = confusion_matrix(y_true, y_pred)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt='d', cmap="Blues", ax=ax)
+    ax.set_title(title)
+    ax.set_xlabel("Predicted Label")
+    ax.set_ylabel("True Label")
 
-def process_page(quit_button, process_button, stock_menu, title_label, window):
-    # Update the title label with the selected stock
-    title_label.configure(text=stock_menu.get())
+    canvas = FigureCanvasTkAgg(fig, master=parent_frame)
+    canvas.draw()
+    widget = canvas.get_tk_widget()
+    widget.pack(expand=True, fill="both", pady=10)
 
-    # Hide the quit button
-    quit_button.place_forget()
+def animate_loading(loading_label):
+    dots = ""
+    while loading_flag:
+        dots += "."
+        if len(dots) > 3:
+            dots = ""
+        loading_label.configure(text=f"Analysing{dots}")
+        time.sleep(0.5)
 
-    # Move "Next" button and stock menu after processing
-    process_button.place(x=50, y=200)
-    stock_menu.place(x=50, y=100)
+def display_classification_report(y_true, y_pred, parent_frame, title="Classification Report"):
+    report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+    df_report = pd.DataFrame(report).transpose()
 
-    # Create the time interval selection options using radio buttons
-    interval_options = ["Hourly", "Daily", "Monthly"]
-    selected_interval = ctk.StringVar(value=interval_options[0])  # Set default to "Hourly"
+    df_display = df_report[['precision', 'recall', 'f1-score']]
 
-    interval_radio_buttons = [
-        ctk.CTkRadioButton(process_button.master, text=interval, value=interval, variable=selected_interval,
-                           font=("Arial", 16))
-        for interval in interval_options
-    ]
+    textbox = ctk.CTkTextbox(parent_frame, width=400, height=200, font=("Consolas", 14))
+    textbox.pack(pady=5)
 
-    # Place radio buttons for time interval selection
-    x_position = 150
-    for radio_button in interval_radio_buttons:
-        radio_button.place(x=150 + x_position, y=250)
-        x_position += 150
+    textbox.insert("end", f"{title}\n\n")
+    textbox.insert("end", f"{'Label':<15}{'Precision':<10}{'Recall':<10}{'F1-Score':<10}\n")
+    textbox.insert("end", "-" * 45 + "\n")
 
-    type_label = ctk.CTkLabel(window, text="Time series type", font=("Arial", 24))
-    type_label.place(x=300, y=150)
+    for index, row in df_display.iterrows():
+        textbox.insert("end", f"{index:<15}{row['precision']:.2f}{' ' * 5}{row['recall']:.2f}{' ' * 5}{row['f1-score']:.2f}\n")
 
-    # Indicator selection labels
-    indicator_label = ctk.CTkLabel(window, text="Select Indicators", font=("Arial", 24))
-    indicator_label.place(x=300, y=350)
+    textbox.configure(state="disabled")
 
-    # Checkboxes for each indicator
+def create_ui():
+    global loading_flag
+
+    window = ctk.CTk()
+    window.geometry("1400x800")
+    window.title("S&P 500 Stock Selector")
+    window.resizable(True, True)
+
+    frame_home = ctk.CTkFrame(window, fg_color="transparent")
+    frame_home.pack(expand=True, fill="both")
+
+    welcome_label = ctk.CTkLabel(frame_home, text="Welcome to S&P 500 Stock Direction Predictor", font=("Arial", 28))
+    welcome_label.pack(pady=20)
+
+    description_label = ctk.CTkLabel(frame_home, text="Select a stock, choose parameters, and predict future movement.",
+                                     font=("Arial", 18))
+    description_label.pack(pady=10)
+
+    sp500_tickers = get_sp500_tickers()
+
+    stock_menu = ctk.CTkOptionMenu(frame_home, values=sp500_tickers, font=("Arial", 16))
+    stock_menu.pack(pady=20)
+
+    next_button = ctk.CTkButton(frame_home, text="Next", font=("Arial", 16))
+    next_button.pack(pady=10)
+
+    quit_button = ctk.CTkButton(frame_home, text="Quit", command=window.quit, font=("Arial", 16))
+    quit_button.pack(pady=10)
+
+    frame_options = ctk.CTkFrame(window, fg_color="transparent")
+
+    option_title = ctk.CTkLabel(frame_options, text="Select Parameters", font=("Arial", 24))
+    option_title.pack(pady=20)
+
+    selected_interval = ctk.StringVar(value="Hourly")
+    intervals = ["Hourly", "Daily", "Monthly"]
+    for interval in intervals:
+        interval_radio = ctk.CTkRadioButton(frame_options, text=interval, value=interval, variable=selected_interval, font=("Arial", 16))
+        interval_radio.pack(pady=5)
+
+    indicator_label = ctk.CTkLabel(frame_options, text="Select Indicators", font=("Arial", 20))
+    indicator_label.pack(pady=20)
+
     sma_var = ctk.BooleanVar(value=False)
     ema_var = ctk.BooleanVar(value=False)
     wma_var = ctk.BooleanVar(value=False)
     rsi_var = ctk.BooleanVar(value=False)
     macd_var = ctk.BooleanVar(value=False)
 
-    sma_checkbox = ctk.CTkCheckBox(window, text="SMA", variable=sma_var, font=("Arial", 16))
-    sma_checkbox.place(x=300, y=400)
+    # SMA
+    sma_checkbox = ctk.CTkCheckBox(frame_options, text="SMA", variable=sma_var, font=("Arial", 16))
+    sma_checkbox.pack(pady=5)
+    CreateToolTip(sma_checkbox,
+                  "SMA: Simple Moving Average\nA simple average of a stock’s price over a specific period.")
 
-    ema_checkbox = ctk.CTkCheckBox(window, text="EMA", variable=ema_var, font=("Arial", 16))
-    ema_checkbox.place(x=300, y=450)
+    # EMA
+    ema_checkbox = ctk.CTkCheckBox(frame_options, text="EMA", variable=ema_var, font=("Arial", 16))
+    ema_checkbox.pack(pady=5)
+    CreateToolTip(ema_checkbox,
+                  "EMA: Exponential Moving Average\nGives more weight to recent prices to better capture short-term trends.")
 
-    wma_checkbox = ctk.CTkCheckBox(window, text="WMA", variable=wma_var, font=("Arial", 16))
-    wma_checkbox.place(x=300, y=500)
+    # WMA
+    wma_checkbox = ctk.CTkCheckBox(frame_options, text="WMA", variable=wma_var, font=("Arial", 16))
+    wma_checkbox.pack(pady=5)
+    CreateToolTip(wma_checkbox,
+                  "WMA: Weighted Moving Average\nEach data point is assigned a weight, emphasizing recent data.")
 
-    rsi_checkbox = ctk.CTkCheckBox(window, text="RSI", variable=rsi_var, font=("Arial", 16))
-    rsi_checkbox.place(x=300, y=550)
+    # RSI
+    rsi_checkbox = ctk.CTkCheckBox(frame_options, text="RSI", variable=rsi_var, font=("Arial", 16))
+    rsi_checkbox.pack(pady=5)
+    CreateToolTip(rsi_checkbox,
+                  "RSI: Relative Strength Index\nMeasures the speed and change of price movements to detect overbought/oversold conditions.")
 
-    macd_checkbox = ctk.CTkCheckBox(window, text="MACD", variable=macd_var, font=("Arial", 16))
-    macd_checkbox.place(x=300, y=600)
+    # MACD
+    macd_checkbox = ctk.CTkCheckBox(frame_options, text="MACD", variable=macd_var, font=("Arial", 16))
+    macd_checkbox.pack(pady=5)
+    CreateToolTip(macd_checkbox,
+                  "MACD: Moving Average Convergence Divergence\nShows the relationship between two moving averages to identify trend direction and strength.")
 
-    # Now you can access which indicators are selected using the .get() method of each BooleanVar
-    selected_indicators = {
-        "SMA": sma_var.get(),
-        "EMA": ema_var.get(),
-        "WMA": wma_var.get(),
-        "RSI": rsi_var.get(),
-        "MACD": macd_var.get()
-    }
+    loading_label = ctk.CTkLabel(frame_options, text="", font=("Arial", 20))
+    loading_label.pack(pady=10)
 
-    # For example, print the selected indicators
-    print("Selected Indicators:", [key for key, value in selected_indicators.items() if value])
+    run_button = ctk.CTkButton(frame_options, text="Run", font=("Arial", 16), fg_color="green", hover_color="darkgreen")
+    run_button.pack(pady=20)
 
+    quit_button2 = ctk.CTkButton(frame_options, text="Quit", command=window.quit, font=("Arial", 16))
+    quit_button2.pack(pady=10)
 
-# UI Setup with customtkinter
-def create_ui():
-    # Create the main window
-    window = ctk.CTk()
-    window.geometry("1920x1080")  # Full screen
-    window.title("S&P 500 Stock Selector")
+    frame_result = ctk.CTkFrame(window, fg_color="transparent")
 
-    # Make the window full screen
-    window.attributes('-fullscreen', True)
+    frame_result_content = ctk.CTkFrame(frame_result, fg_color="transparent")
+    frame_result_content.pack(pady=20, padx=20, expand=True, fill="both")
 
-    # Create a title label
-    title_label = ctk.CTkLabel(window, text="Select a Stock from S&P 500", font=("Arial", 24))
-    title_label.place(x=1120, y=100)
+    frame_left = ctk.CTkFrame(frame_result_content, fg_color="transparent")
+    frame_left.pack(side="left", fill="y", padx=20, pady=10)
 
-    # Get S&P 500 tickers
-    sp500_tickers = get_sp500_tickers()
+    frame_right = ctk.CTkFrame(frame_result_content, fg_color="transparent")
+    frame_right.pack(side="right", fill="both", expand=True, padx=20, pady=10)
 
-    # Create a drop-down menu to select a stock
-    stock_menu = ctk.CTkOptionMenu(window, values=sp500_tickers, font=("Arial", 16))
-    stock_menu.place(x=1200, y=250)
+    result_label = ctk.CTkLabel(frame_left, text="Results will appear here", font=("Arial", 20))
+    result_label.pack(pady=20)
 
-    # Function when a stock is selected
-    def on_stock_select(event=None):
+    frame_val_report = ctk.CTkFrame(frame_left, fg_color="transparent")
+    frame_val_report.pack(pady=10)
+
+    frame_test_report = ctk.CTkFrame(frame_left, fg_color="transparent")
+    frame_test_report.pack(pady=10)
+
+    back_button = ctk.CTkButton(frame_left, text="Back to Home", font=("Arial", 16),
+                                command=lambda: [frame_result.pack_forget(), frame_home.pack(expand=True, fill="both")])
+    back_button.pack(pady=10)
+
+    quit_button3 = ctk.CTkButton(frame_left, text="Quit", command=window.quit, font=("Arial", 16))
+    quit_button3.pack(pady=10)
+
+    frame_val_confusion = ctk.CTkFrame(frame_right, fg_color="transparent")
+    frame_val_confusion.pack(pady=20)
+
+    frame_test_confusion = ctk.CTkFrame(frame_right, fg_color="transparent")
+    frame_test_confusion.pack(pady=20)
+
+    def go_to_options():
         selected_stock = stock_menu.get()
         print(f"Selected Stock: {selected_stock}")
-        # You can implement more logic here, e.g., fetching data for the selected stock.
+        frame_home.pack_forget()
+        frame_options.pack(expand=True, fill="both")
 
-    # Bind event for selection
-    stock_menu.bind("<Configure>", on_stock_select)
+    def run_selected_script():
+        global loading_flag
 
-    # Create the "Next" button
-    process_button = ctk.CTkButton(window, text="Next",
-                                   command=lambda: process_page(quit_button, process_button, stock_menu, title_label,
-                                                                window), font=("Arial", 16))
-    process_button.place(x=1200, y=350)
+        stock = stock_menu.get()
+        interval = selected_interval.get()
 
-    # Add a Quit button
-    quit_button = ctk.CTkButton(window, text="Quit", command=window.quit, font=("Arial", 16))
-    quit_button.place(x=1200, y=450)
+        selected_features = ["Open", "High", "Low", "Close", "Volume"]
+        if sma_var.get():
+            selected_features.append("SMA")
+        if ema_var.get():
+            selected_features.append("EMA")
+        if wma_var.get():
+            selected_features.append("WMA")
+        if rsi_var.get():
+            selected_features.append("RSI")
+        if macd_var.get():
+            selected_features.extend(["MACD", "MACD_Signal"])
 
-    # Bind the "Q" key to quit the application
-    window.bind('<q>', lambda event: window.quit())
+        loading_flag = True
+        threading.Thread(target=animate_loading, args=(loading_label,), daemon=True).start()
 
-    # Start the main loop
+        def train_and_show_result():
+            global loading_flag
+
+            if interval == "Hourly":
+                val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred = hr.train_stock_hour_classifier(stock, selected_features)
+            elif interval == "Daily":
+                val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred = day.train_stock_day_classifier(stock, selected_features)
+            else:
+                print("Monthly interval is not supported yet.")
+                loading_flag = False
+                return
+
+            loading_flag = False
+
+            frame_options.pack_forget()
+            frame_result.pack(expand=True, fill="both")
+
+            result_label.configure(text=f"Validation Accuracy: {val_acc:.2f}\nTest Accuracy: {test_acc:.2f}")
+
+            for widget in frame_val_confusion.winfo_children():
+                widget.destroy()
+            for widget in frame_test_confusion.winfo_children():
+                widget.destroy()
+            for widget in frame_val_report.winfo_children():
+                widget.destroy()
+            for widget in frame_test_report.winfo_children():
+                widget.destroy()
+
+            plot_confusion(y_val, y_val_pred, parent_frame=frame_val_confusion, title="Validation Set Confusion Matrix")
+            plot_confusion(y_test, y_test_pred, parent_frame=frame_test_confusion, title="Test Set Confusion Matrix")
+
+            display_classification_report(y_val, y_val_pred, parent_frame=frame_val_report, title="Validation Report")
+            display_classification_report(y_test, y_test_pred, parent_frame=frame_test_report, title="Test Report")
+
+        threading.Thread(target=train_and_show_result, daemon=True).start()
+
+    next_button.configure(command=go_to_options)
+    run_button.configure(command=run_selected_script)
+
     window.mainloop()
 
-
-# Run the UI
 if __name__ == "__main__":
     create_ui()
