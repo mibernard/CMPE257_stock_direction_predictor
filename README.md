@@ -8,4 +8,3 @@ lib
 
 dataset:
 forcus on apple stock first
-- Dexter
