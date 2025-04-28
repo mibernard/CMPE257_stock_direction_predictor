@@ -6,6 +6,7 @@ import threading
 import time
 import day
 import hr
+import month
 from sklearn.metrics import confusion_matrix, classification_report
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tooltip import CreateToolTip
@@ -214,10 +215,10 @@ def create_ui():
                 val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred = hr.train_stock_hour_classifier(stock, selected_features)
             elif interval == "Daily":
                 val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred = day.train_stock_day_classifier(stock, selected_features)
+            elif interval == "Monthly":
+                val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred = month.train_stock_month_classifier(stock, selected_features)
             else:
-                print("Monthly interval is not supported yet.")
-                loading_flag = False
-                return
+                print("do nothing")
 
             loading_flag = False
 
