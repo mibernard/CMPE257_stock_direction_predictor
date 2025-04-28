@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-import functions  # 负责加技术指标
+import functions
 
 def train_stock_hour_classifier(ticker_symbol, feature_cols):
     # Step 1: Download LAST 2 years of stock price data — HOURLY
@@ -44,7 +44,7 @@ def train_stock_hour_classifier(ticker_symbol, feature_cols):
     # Step 5: Merge labels onto main df
     df = df.merge(labels_df, on='WeekNumber', how='inner')
 
-    # Step 6: 添加技术指标列
+    # Step 6: technical indicators
     df = functions.add_technical_indicators(df)
 
     # Step 7: Prepare 5-day windowed features
@@ -69,6 +69,8 @@ def train_stock_hour_classifier(ticker_symbol, feature_cols):
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42, shuffle=True)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=2/3, random_state=42, shuffle=True)
 
+    print(X_train)
+
     # Step 9: Train model
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
@@ -81,5 +83,5 @@ def train_stock_hour_classifier(ticker_symbol, feature_cols):
     y_test_pred = model.predict(X_test)
     test_acc = accuracy_score(y_test, y_test_pred)
 
-    # Step 12: 返回
+    # Step 12: Return value
     return val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred
