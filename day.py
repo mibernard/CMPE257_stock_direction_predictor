@@ -68,5 +68,5 @@ def train_stock_day_classifier(ticker_symbol, feature_cols):
     y_test_pred = model.predict(X_test)
     test_acc = accuracy_score(y_test, y_test_pred)
 
-    # Step 12: 返回必要的数据给前端显示
+    # Step 12: Return value
     return val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred
