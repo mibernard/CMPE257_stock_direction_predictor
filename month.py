@@ -8,8 +8,10 @@ import functions
 
 def train_stock_month_classifier(ticker_symbol, feature_cols):
     # Step 1: Download historical data - MONTHLY
-    stock = yf.Ticker(ticker_symbol)
-    df = stock.history(period="max", interval="1mo")
+    # stock = yf.Ticker(ticker_symbol)
+    # df = stock.history(period="max", interval="1mo")
+    df = yf.download(ticker_symbol, period="730d", interval="1mo", auto_adjust=True, multi_level_index=False)
+    df.reset_index(inplace=True)
     df.reset_index(inplace=True)
 
     # Step 2: Create month period and filter full months
@@ -43,6 +45,11 @@ def train_stock_month_classifier(ticker_symbol, feature_cols):
     labels_df = pd.DataFrame(labels, columns=['Month', 'Label'])
 
     # Step 5: Merge labels onto main df
+    # Before merging, convert Period to string in both DataFrames
+    df['Month'] = df['Month'].astype(str)
+    labels_df['Month'] = labels_df['Month'].astype(str)
+
+    # Now merge
     df = df.merge(labels_df, on='Month', how='inner')
 
     # Step 6: Add technical indicators (ensure they support monthly frequency)
