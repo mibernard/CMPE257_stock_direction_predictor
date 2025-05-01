@@ -4,12 +4,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import functions
+from YahooFinance import get_yahoo_history
 
 def train_stock_day_classifier(ticker_symbol, feature_cols):
     # Step 1: Download LAST 2 years of stock price data — DAILY
-    stock = yf.Ticker(ticker_symbol)
-    df = stock.history(period="730d", interval="1h")
-    df.reset_index(inplace=True)
+    # stock = yf.Ticker(ticker_symbol)
+    # df = stock.history(period="730d", interval="1h")
+    # df.reset_index(inplace=True)
+    df = get_yahoo_history(ticker_symbol, interval='1d', lookback_days=730)
 
     # Step 2: Create 'OnlyDate' and 'WeekNumber'
     df['OnlyDate'] = df['Datetime'].dt.date
@@ -69,4 +71,4 @@ def train_stock_day_classifier(ticker_symbol, feature_cols):
     test_acc = accuracy_score(y_test, y_test_pred)
 
     # Step 12: Return value
-    return val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred
+    return model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df
