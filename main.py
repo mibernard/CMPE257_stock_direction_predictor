@@ -291,7 +291,6 @@ def create_ui():
                 #                title="Validation Set Confusion Matrix")
                 # plot_confusion(y_test, y_test_pred, parent_frame=frame_test_confusion,
                 #                title="Test Set Confusion Matrix")
-
                 display_classification_report(y_val, y_val_pred, parent_frame=frame_val_report,
                                               title="Validation Report")
                 display_classification_report(y_test, y_test_pred, parent_frame=frame_test_report, title="Test Report")
