@@ -86,7 +86,7 @@ def create_ui():
             ax.tick_params(axis='x', labelrotation=45)
             ax.legend()
         else:
-            df_candle = df.set_index("Datetime")[["Open", "High", "Low", "Close"]].tail(200)
+            df_candle = df.set_index("Datetime")[["Open", "High", "Low", "Close"]].tail(500)
             fig, _ = mpf.plot(df_candle, type='candle', style='charles', title="Candlestick Chart", returnfig=True)
 
         canvas = FigureCanvasTkAgg(fig, master=parent_frame)
@@ -286,7 +286,6 @@ def create_ui():
                     for widget in container.winfo_children():
                         widget.destroy()
 
-                # 展示混淆矩阵和分类报告
                 # plot_confusion(y_val, y_val_pred, parent_frame=frame_val_confusion,
                 #                title="Validation Set Confusion Matrix")
                 # plot_confusion(y_test, y_test_pred, parent_frame=frame_test_confusion,
