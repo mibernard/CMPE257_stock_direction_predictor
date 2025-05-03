@@ -168,6 +168,40 @@ def create_ui():
     CreateToolTip(macd_checkbox,
                   "MACD: Moving Average Convergence Divergence\nShows the relationship between two moving averages to identify trend direction and strength.")
 
+
+    # ==============================================================================
+    #                              Model
+    # ==============================================================================
+
+    global selected_model
+
+    model_title = ctk.CTkLabel(frame_options, text="Select Model", font=("Arial", 24))
+    model_title.pack(pady=20)
+
+    frame_models = ctk.CTkFrame(frame_options, fg_color="transparent")
+    frame_models.pack()
+
+    model_options = {
+        "Logistic Regression": "0",
+        "SVM": "1",
+        "Random Forest": "3",
+        "Gradient Boosting": "4",
+        "k-NN": "5",
+        "Naive Bayes": "6",
+        "AdaBoost": "7",
+        "Bagging": "8",
+        "Extra Trees": "9"
+    }
+
+    selected_model = ctk.StringVar(value="3")
+
+    start_y = 0
+    for name, value in model_options.items():
+        rb = ctk.CTkRadioButton(frame_models, text=name, value=value,
+                                variable=selected_model, font=("Arial", 14))
+        rb.place(x=0, y=start_y)
+        start_y += 30  # spacing between buttons
+
     loading_label = ctk.CTkLabel(frame_options, text="", font=("Arial", 20))
     loading_label.pack(pady=10)
 
@@ -218,6 +252,7 @@ def create_ui():
 
     def run_selected_script():
         global loading_flag
+        global selected_model
 
         stock = stock_menu.get()
         interval = selected_interval.get()
@@ -239,6 +274,7 @@ def create_ui():
 
         def train_and_show_result():
             global loading_flag
+            global selected_model
 
             stock = stock_menu.get()
             interval = selected_interval.get()
@@ -263,13 +299,13 @@ def create_ui():
 
                 if interval == "Hourly":
                     model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = hr.train_stock_hour_classifier(
-                        stock, selected_features)
+                        stock, selected_features, selected_model.get())
                 elif interval == "Daily":
                     model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = day.train_stock_day_classifier(
-                        stock, selected_features)
+                        stock, selected_features, selected_model.get())
                 elif interval == "Monthly":
                     model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = month.train_stock_month_classifier(
-                        stock, selected_features)
+                        stock, selected_features, selected_model.get())
                 else:
                     print("do nothing")
                     return

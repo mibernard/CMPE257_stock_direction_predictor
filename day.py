@@ -1,12 +1,18 @@
 import yfinance as yf
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import functions
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from YahooFinance import get_yahoo_history
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier, ExtraTreesClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 
-def train_stock_day_classifier(ticker_symbol, feature_cols):
+
+def train_stock_day_classifier(ticker_symbol, feature_cols, model_index):
     # Step 1: Download LAST 2 years of stock price data — DAILY
     # stock = yf.Ticker(ticker_symbol)
     # df = stock.history(period="730d", interval="1h")
@@ -57,9 +63,33 @@ def train_stock_day_classifier(ticker_symbol, feature_cols):
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42, shuffle=True)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=2/3, random_state=42, shuffle=True)
 
-    print(X_train)
+    # ===============================================================
     # Step 9: Train model
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    # ===============================================================
+    model = None
+
+    if model_index == "0":
+        model = LogisticRegression(C=1.0)
+    elif model_index == "1":
+        model = SVC(C=1.0, kernel='rbf')
+    elif model_index == "2":
+        model = DecisionTreeClassifier(max_depth=None, min_samples_split=2)
+    elif model_index == "3":
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+    elif model_index == "4":
+        model = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1)
+    elif model_index == "5":
+        model = KNeighborsClassifier(n_neighbors=5, metric='minkowski')
+    elif model_index == "6":
+        model = GaussianNB(var_smoothing=1e-9)
+    elif model_index == "7":
+        model = AdaBoostClassifier(n_estimators=50, learning_rate=1.0)
+    elif model_index == "8":
+        model = BaggingClassifier(n_estimators=10)
+    elif model_index == "9":
+        model = ExtraTreesClassifier(n_estimators=100, max_depth=None)
+
+    # model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
 
     # Step 10: Validation
