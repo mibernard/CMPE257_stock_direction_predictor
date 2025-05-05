@@ -1,432 +1,155 @@
-import customtkinter as ctk
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import threading
-import time
+from PyQt6.QtGui import QIcon
+import sys
 import os
-import matplotlib.dates as mdates
-from PIL import Image, ImageTk  # For handling the logo image
 
-import yfinance
+# Add the current directory to the path to ensure imports work
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-import day
-import hr
-import month
-import mplfinance as mpf
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from sklearn.metrics import confusion_matrix, classification_report
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from tooltip import CreateToolTip
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
+from views.home_view import HomeView
+from views.options_view import OptionsView
+from views.results_view import ResultsView
+from controllers.app_controller import AppController
+from models.stock_data import StockDataModel
+from models.predictor import PredictorModel
 
-loading_flag = False
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
 
-def get_sp500_tickers():
-    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    tables = pd.read_html(url)
-    df = tables[0]
-    return df['Symbol'].tolist()
-
-def plot_confusion(y_true, y_pred, parent_frame, title="Confusion Matrix"):
-    cm = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3, 4])
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt='d', cmap="Blues", ax=ax)
-    ax.set_title(title)
-    ax.set_xlabel("Predicted Label")
-    ax.set_ylabel("True Label")
-
-    canvas = FigureCanvasTkAgg(fig, master=parent_frame)
-    canvas.draw()
-    widget = canvas.get_tk_widget()
-    widget.pack(expand=True, fill="both", pady=10)
-
-def animate_loading(loading_label):
-    dots = ""
-    while loading_flag:
-        dots += "."
-        if len(dots) > 3:
-            dots = ""
-        loading_label.configure(text=f"Analysing{dots}")
-        time.sleep(0.5)
-
-def display_classification_report(y_true, y_pred, parent_frame, title="Classification Report"):
-    report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
-    df_report = pd.DataFrame(report).transpose()
-
-    df_display = df_report[['precision', 'recall', 'f1-score']]
-
-    textbox = ctk.CTkTextbox(parent_frame, width=400, height=200, font=("Consolas", 14))
-    textbox.pack(pady=5)
-
-    textbox.insert("end", f"{title}\n\n")
-    textbox.insert("end", f"{'Label':<15}{'Precision':<10}{'Recall':<10}{'F1-Score':<10}\n")
-    textbox.insert("end", "-" * 45 + "\n")
-
-    for index, row in df_display.iterrows():
-        textbox.insert("end", f"{index:<15}{row['precision']:.2f}{' ' * 5}{row['recall']:.2f}{' ' * 5}{row['f1-score']:.2f}\n")
-
-    textbox.configure(state="disabled")
-
-def create_ui():
-    window = ctk.CTk()
-    window.geometry("1400x800")
-    window.title("S&P 500 Stock Selector")
-    window.resizable(True, True)
-    
-    # Set window icon
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
-    if os.path.exists(icon_path):
-        window.iconbitmap(icon_path)
-    
-    chart_type = ctk.StringVar(value="line")  # 默认折线图
-
-    def plot_chart(df, parent_frame):
-        # 清空旧图表
-        for widget in parent_frame.winfo_children():
-            widget.destroy()
-
-        if chart_type.get() == "line":
-            fig, ax = plt.subplots(figsize=(8, 4))
-            
-            # Convert datetime to proper datetime objects if they're not already
-            if not pd.api.types.is_datetime64_any_dtype(df['Datetime']):
-                df['Datetime'] = pd.to_datetime(df['Datetime'])
-            
-            # Use explicit datetime objects for plotting instead of timestamps
-            ax.plot(df['Datetime'], df['Close'], label="Close Price", color="blue")
-            ax.set_title("Close Price Over Time")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price")
-            
-            # Format x-axis to display dates properly
-            fig.autofmt_xdate()  # Auto-format dates
-            
-            # Format dates with a formatter that disables scientific notation
-            date_format = mdates.DateFormatter('%Y-%m-%d')
-            ax.xaxis.set_major_formatter(date_format)
-            
-            # Disable scientific notation on the x-axis
-            ax.ticklabel_format(useOffset=False, style='plain', axis='x')
-            
-            # Adjust rotation for better visibility
-            plt.xticks(rotation=45)
-            
-            ax.legend()
-        else:
-            df_candle = df.set_index("Datetime")[["Open", "High", "Low", "Close"]].tail(500)
-            fig, _ = mpf.plot(df_candle, type='candle', style='charles', title="Candlestick Chart", returnfig=True)
-
-        canvas = FigureCanvasTkAgg(fig, master=parent_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(pady=10, fill="both", expand=True)
-
-    global loading_flag
-
-
-
-    frame_home = ctk.CTkFrame(window, fg_color="transparent")
-    frame_home.pack(expand=True, fill="both")
-
-    # Add logo at the top of the home page
-    logo_frame = ctk.CTkFrame(frame_home, fg_color="transparent")
-    logo_frame.pack(pady=10)
-    
-    try:
-        # Try to add the logo image to the home page
+        self.setWindowTitle("Stock Direction Predictor")
+        self.setMinimumSize(1200, 800)
+        
+        # Set application icon
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
         if os.path.exists(icon_path):
-            # CustomTkinter doesn't support .ico files directly for CTkImage, 
-            # but we can use PIL to open the ico and convert it
-            pil_image = Image.open(icon_path)
-            ctk_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(100, 100))
-            logo_label = ctk.CTkLabel(logo_frame, image=ctk_image, text="")
-            logo_label.pack(pady=10)
-    except Exception as e:
-        print(f"Error loading logo image: {e}")
-
-    welcome_label = ctk.CTkLabel(frame_home, text="Welcome to S&P 500 Stock Direction Predictor", font=("Arial", 28))
-    welcome_label.pack(pady=20)
-
-    description_label = ctk.CTkLabel(frame_home, text="Select a stock, choose parameters, and predict future movement.",
-                                     font=("Arial", 18))
-    description_label.pack(pady=10)
-
-    sp500_tickers = get_sp500_tickers()
-
-    # Create dropdown with visible arrow
-    stock_menu = ctk.CTkOptionMenu(
-        frame_home, 
-        values=sp500_tickers, 
-        font=("Arial", 16),
-        dropdown_font=("Arial", 14),
-        fg_color="white",            # Background color
-        button_color="#e0e0e0",      # Button color
-        button_hover_color="#d0d0d0", # Button hover color
-        text_color="black",          # Text color
-        dropdown_fg_color="white",   # Dropdown background color
-        dropdown_text_color="black", # Dropdown text color
-        dropdown_hover_color="#e0e0e0", # Dropdown hover color
-        border_color="#aaaaaa",      # Border color for outline
-        border_width=1,             # Border width for visible outline
-        # Make sure dropdown is wide enough
-        width=220,
-        # Use a visible icon for the arrow
-        dropdown_icon=ctk.CTkImage(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
-    )
-    # Add a label with down arrow manually
-    arrow_label = ctk.CTkLabel(
-        stock_menu, 
-        text="▼", 
-        font=("Arial", 9),
-        text_color="black",
-        bg_color="#e0e0e0"
-    )
-    # Position the arrow at the right side of the dropdown
-    arrow_label.place(relx=0.92, rely=0.5, anchor="center")
+            self.setWindowIcon(QIcon(icon_path))
+        
+        # Set up style
+        self.setStyleSheet("""
+            QMainWindow, QWidget {
+                background-color: #f5f5f5;
+                color: #333333;
+            }
+            QLabel {
+                color: #333333;
+            }
+            QPushButton {
+                background-color: #4a86e8;
+                color: white;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3a76d8;
+            }
+            QPushButton:pressed {
+                background-color: #2a66c8;
+            }
+            QGroupBox {
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                margin-top: 1.5ex;
+                padding-top: 10px;
+                color: #333333;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 5px;
+                color: #333333;
+            }
+            QComboBox {
+                color: #333333;
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QComboBox QAbstractItemView {
+                color: #333333;
+                background-color: white;
+                selection-background-color: #4a86e8;
+                selection-color: white;
+            }
+            QRadioButton, QCheckBox {
+                color: #333333;
+            }
+            QTextEdit {
+                color: #333333;
+                background-color: white;
+                border: 1px solid #cccccc;
+            }
+            QTabWidget::pane {
+                border: 1px solid #cccccc;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background-color: #e0e0e0;
+                color: #333333;
+                border: 1px solid #cccccc;
+                padding: 6px 10px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom-color: white;
+            }
+            QSplitter::handle {
+                background-color: #cccccc;
+            }
+        """)
+        
+        # Central stacked widget for different views
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
+        
+        # Initialize controller
+        self.controller = AppController(self)
+        
+        # Initialize views
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Initialize and set up UI components"""
+        self.home_view = HomeView(self.controller)
+        self.options_view = OptionsView(self.controller) 
+        self.results_view = ResultsView(self.controller)
+        
+        # Add views to stacked widget
+        self.stacked_widget.addWidget(self.home_view)
+        self.stacked_widget.addWidget(self.options_view)
+        self.stacked_widget.addWidget(self.results_view)
+        
+        # Start with home view
+        self.stacked_widget.setCurrentWidget(self.home_view)
     
-    stock_menu.pack(pady=20)
+    def navigate_to(self, view_name):
+        """Switch to a specific view"""
+        if view_name == "home":
+            self.stacked_widget.setCurrentWidget(self.home_view)
+        elif view_name == "options":
+            self.stacked_widget.setCurrentWidget(self.options_view)
+        elif view_name == "results":
+            self.stacked_widget.setCurrentWidget(self.results_view)
 
-    next_button = ctk.CTkButton(frame_home, text="Next", font=("Arial", 16))
-    next_button.pack(pady=10)
-
-    quit_button = ctk.CTkButton(frame_home, text="Quit", command=window.quit, font=("Arial", 16))
-    quit_button.pack(pady=10)
-
-    frame_options = ctk.CTkFrame(window, fg_color="transparent")
-
-    option_title = ctk.CTkLabel(frame_options, text="Select Parameters", font=("Arial", 24))
-    option_title.pack(pady=20)
-
-    selected_interval = ctk.StringVar(value="Hourly")
-    intervals = ["Hourly", "Daily", "Monthly"]
-    for interval in intervals:
-        interval_radio = ctk.CTkRadioButton(frame_options, text=interval, value=interval, variable=selected_interval, font=("Arial", 16))
-        interval_radio.pack(pady=5)
-
-    indicator_label = ctk.CTkLabel(frame_options, text="Select Indicators", font=("Arial", 20))
-    indicator_label.pack(pady=20)
-
-    sma_var = ctk.BooleanVar(value=False)
-    ema_var = ctk.BooleanVar(value=False)
-    wma_var = ctk.BooleanVar(value=False)
-    rsi_var = ctk.BooleanVar(value=False)
-    macd_var = ctk.BooleanVar(value=False)
-
-    # SMA
-    sma_checkbox = ctk.CTkCheckBox(frame_options, text="SMA", variable=sma_var, font=("Arial", 16))
-    sma_checkbox.pack(pady=5)
-    CreateToolTip(sma_checkbox,
-                  "SMA: Simple Moving Average\nA simple average of a stock's price over a specific period.")
-
-    # EMA
-    ema_checkbox = ctk.CTkCheckBox(frame_options, text="EMA", variable=ema_var, font=("Arial", 16))
-    ema_checkbox.pack(pady=5)
-    CreateToolTip(ema_checkbox,
-                  "EMA: Exponential Moving Average\nGives more weight to recent prices to better capture short-term trends.")
-
-    # WMA
-    wma_checkbox = ctk.CTkCheckBox(frame_options, text="WMA", variable=wma_var, font=("Arial", 16))
-    wma_checkbox.pack(pady=5)
-    CreateToolTip(wma_checkbox,
-                  "WMA: Weighted Moving Average\nEach data point is assigned a weight, emphasizing recent data.")
-
-    # RSI
-    rsi_checkbox = ctk.CTkCheckBox(frame_options, text="RSI", variable=rsi_var, font=("Arial", 16))
-    rsi_checkbox.pack(pady=5)
-    CreateToolTip(rsi_checkbox,
-                  "RSI: Relative Strength Index\nMeasures the speed and change of price movements to detect overbought/oversold conditions.")
-
-    # MACD
-    macd_checkbox = ctk.CTkCheckBox(frame_options, text="MACD", variable=macd_var, font=("Arial", 16))
-    macd_checkbox.pack(pady=5)
-    CreateToolTip(macd_checkbox,
-                  "MACD: Moving Average Convergence Divergence\nShows the relationship between two moving averages to identify trend direction and strength.")
-
-
-    # ==============================================================================
-    #                              Model
-    # ==============================================================================
-
-    global selected_model
-
-    model_title = ctk.CTkLabel(frame_options, text="Select Model", font=("Arial", 24))
-    model_title.pack(pady=20)
-
-    frame_models = ctk.CTkFrame(frame_options, fg_color="transparent")
-    frame_models.pack()
-
-    model_options = {
-        "Logistic Regression": "0",
-        "SVM": "1",
-        "Random Forest": "3",
-        "Gradient Boosting": "4",
-        "k-NN": "5",
-        "Naive Bayes": "6",
-        "AdaBoost": "7",
-        "Bagging": "8",
-        "Extra Trees": "9"
-    }
-
-    selected_model = ctk.StringVar(value="3")
-
-    start_y = 0
-    for name, value in model_options.items():
-        rb = ctk.CTkRadioButton(frame_models, text=name, value=value,
-                                variable=selected_model, font=("Arial", 14))
-        rb.place(x=0, y=start_y)
-        start_y += 30  # spacing between buttons
-
-    loading_label = ctk.CTkLabel(frame_options, text="", font=("Arial", 20))
-    loading_label.pack(pady=10)
-
-    run_button = ctk.CTkButton(frame_options, text="Run", font=("Arial", 16), fg_color="green", hover_color="darkgreen")
-    run_button.pack(pady=20)
-
-    quit_button2 = ctk.CTkButton(frame_options, text="Quit", command=window.quit, font=("Arial", 16))
-    quit_button2.pack(pady=10)
-
-    frame_result = ctk.CTkFrame(window, fg_color="transparent")
-
-    frame_result_content = ctk.CTkFrame(frame_result, fg_color="transparent")
-    frame_result_content.pack(pady=20, padx=20, expand=True, fill="both")
-
-    frame_left = ctk.CTkFrame(frame_result_content, fg_color="transparent")
-    frame_left.pack(side="left", fill="y", padx=20, pady=10)
-
-    frame_right = ctk.CTkFrame(frame_result_content, fg_color="transparent")
-    frame_right.pack(side="right", fill="both", expand=True, padx=20, pady=10)
-
-    result_label = ctk.CTkLabel(frame_left, text="Results will appear here", font=("Arial", 20))
-    result_label.pack(pady=20)
-
-    frame_val_report = ctk.CTkFrame(frame_left, fg_color="transparent")
-    frame_val_report.pack(pady=10)
-
-    frame_test_report = ctk.CTkFrame(frame_left, fg_color="transparent")
-    frame_test_report.pack(pady=10)
-
-    back_button = ctk.CTkButton(frame_left, text="Back to Home", font=("Arial", 16),
-                                command=lambda: [frame_result.pack_forget(), frame_home.pack(expand=True, fill="both")])
-    back_button.pack(pady=10)
-
-    quit_button3 = ctk.CTkButton(frame_left, text="Quit", command=window.quit, font=("Arial", 16))
-    quit_button3.pack(pady=10)
-
-    frame_val_confusion = ctk.CTkFrame(frame_right, fg_color="transparent")
-    frame_val_confusion.pack(pady=20)
-
-    frame_test_confusion = ctk.CTkFrame(frame_right, fg_color="transparent")
-    frame_test_confusion.pack(pady=20)
-
-    def go_to_options():
-        selected_stock = stock_menu.get()
-        print(f"Selected Stock: {selected_stock}")
-        frame_home.pack_forget()
-        frame_options.pack(expand=True, fill="both")
-
-    def run_selected_script():
-        global loading_flag
-        global selected_model
-
-        stock = stock_menu.get()
-        interval = selected_interval.get()
-
-        selected_features = ["Open", "High", "Low", "Close", "Volume"]
-        if sma_var.get():
-            selected_features.append("SMA")
-        if ema_var.get():
-            selected_features.append("EMA")
-        if wma_var.get():
-            selected_features.append("WMA")
-        if rsi_var.get():
-            selected_features.append("RSI")
-        if macd_var.get():
-            selected_features.extend(["MACD", "MACD_Signal"])
-
-        loading_flag = True
-        threading.Thread(target=animate_loading, args=(loading_label,), daemon=True).start()
-
-        def train_and_show_result():
-            global loading_flag
-            global selected_model
-
-            stock = stock_menu.get()
-            interval = selected_interval.get()
-
-            selected_features = ["Open", "High", "Low", "Close", "Volume"]
-            if sma_var.get():
-                selected_features.append("SMA")
-            if ema_var.get():
-                selected_features.append("EMA")
-            if wma_var.get():
-                selected_features.append("WMA")
-            if rsi_var.get():
-                selected_features.append("RSI")
-            if macd_var.get():
-                selected_features.extend(["MACD", "MACD_Signal"])
-
-            loading_flag = True
-            threading.Thread(target=animate_loading, args=(loading_label,), daemon=True).start()
-
-            def inner_train():
-                global loading_flag
-
-                if interval == "Hourly":
-                    model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = hr.train_stock_hour_classifier(
-                        stock, selected_features, selected_model.get())
-                elif interval == "Daily":
-                    model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = day.train_stock_day_classifier(
-                        stock, selected_features, selected_model.get())
-                elif interval == "Monthly":
-                    model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df = month.train_stock_month_classifier(
-                        stock, selected_features, selected_model.get())
-                else:
-                    print("do nothing")
-                    return
-
-                loading_flag = False
-
-                frame_options.pack_forget()
-                frame_result.pack(expand=True, fill="both")
-
-
-                result_label.configure(text=f"Validation Accuracy: {val_acc:.2f}\nTest Accuracy: {test_acc:.2f}")
-
-                for container in [frame_val_confusion, frame_test_confusion, frame_val_report, frame_test_report]:
-                    for widget in container.winfo_children():
-                        widget.destroy()
-
-                # plot_confusion(y_val, y_val_pred, parent_frame=frame_val_confusion,
-                #                title="Validation Set Confusion Matrix")
-                # plot_confusion(y_test, y_test_pred, parent_frame=frame_test_confusion,
-                #                title="Test Set Confusion Matrix")
-                display_classification_report(y_val, y_val_pred, parent_frame=frame_val_report,
-                                              title="Validation Report")
-                display_classification_report(y_test, y_test_pred, parent_frame=frame_test_report, title="Test Report")
-
-                plot_chart(df, frame_test_confusion)
-
-                def toggle_to_line():
-                    chart_type.set("line")
-                    plot_chart(df, frame_test_confusion)
-
-                def toggle_to_candle():
-                    chart_type.set("candle")
-                    plot_chart(df, frame_test_confusion)
-
-                ctk.CTkButton(frame_left, text="Line Chart", command=toggle_to_line).pack(pady=5)
-                ctk.CTkButton(frame_left, text="Candlestick Chart", command=toggle_to_candle).pack(pady=5)
-
-            threading.Thread(target=inner_train, daemon=True).start()
-
-        threading.Thread(target=train_and_show_result, daemon=True).start()
-
-    next_button.configure(command=go_to_options)
-    run_button.configure(command=run_selected_script)
-
-    window.mainloop()
+def main():
+    # Create the application
+    app = QApplication(sys.argv)
+    
+    # Set application icon at the app level too
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    
+    # Create and show the main window
+    window = MainWindow()
+    window.show()
+    
+    # Run the application event loop
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    print(yfinance.version.version)
-    create_ui()
+    main() 
