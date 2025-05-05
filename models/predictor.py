@@ -69,38 +69,22 @@ class PredictorModel(QObject):
             else:
                 raise ValueError(f"Invalid interval: {interval}")
                 
-            # Return results
-            if interval == "Monthly":  # month.py has different return values
-                return {
-                    'status': 'success',
-                    'ticker': ticker,
-                    'interval': interval,
-                    'indicators': indicators,
-                    'model_type': model_type,
-                    'val_accuracy': result[0],
-                    'test_accuracy': result[1],
-                    'y_val': result[2],
-                    'y_val_pred': result[3],
-                    'y_test': result[4],
-                    'y_test_pred': result[5],
-                    'df': None  # Month function doesn't return df
-                }
-            else:
-                return {
-                    'status': 'success',
-                    'ticker': ticker,
-                    'interval': interval,
-                    'indicators': indicators,
-                    'model_type': model_type,
-                    'model': result[0],
-                    'val_accuracy': result[1],
-                    'test_accuracy': result[2],
-                    'y_val': result[3],
-                    'y_val_pred': result[4],
-                    'y_test': result[5],
-                    'y_test_pred': result[6],
-                    'df': result[7] if len(result) > 7 else None
-                }
+            # Return results - now all intervals have the same return values format
+            return {
+                'status': 'success',
+                'ticker': ticker,
+                'interval': interval,
+                'indicators': indicators,
+                'model_type': model_type,
+                'model': result[0],
+                'val_accuracy': result[1],
+                'test_accuracy': result[2],
+                'y_val': result[3],
+                'y_val_pred': result[4],
+                'y_test': result[5],
+                'y_test_pred': result[6],
+                'df': result[7] if len(result) > 7 else None
+            }
             
         except Exception as e:
             import traceback

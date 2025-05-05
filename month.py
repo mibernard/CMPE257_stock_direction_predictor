@@ -16,16 +16,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 
 def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
-    # Step 1: Download historical data - MONTHLY
-    # stock = yf.Ticker(ticker_symbol)
-    # df = stock.history(period="max", interval="1mo")
-    df = yf.download(ticker_symbol, period="730d", interval="1mo", auto_adjust=True, multi_level_index=False)
-    df.reset_index(inplace=True)
-    df.reset_index(inplace=True)
-
+    # Step 1: Download historical data - MONTHLY (increase lookback to 10 years for monthly data)
+    # Use the consistent get_yahoo_history function instead of direct yf.download
+    df = get_yahoo_history(ticker_symbol, interval='1mo', lookback_days=3650)  # ~10 years
+    
     # Step 2: Create month period and filter full months
-    df['Month'] = df['Date'].dt.to_period('M')
-    df = df[df['Date'] == df.groupby('Month')['Date'].transform('last')]
+    df['Month'] = df['Datetime'].dt.to_period('M')
+    df = df[df['Datetime'] == df.groupby('Month')['Datetime'].transform('max')]
 
     # Step 3: Get last Close price per month
     month_last_price = df.groupby('Month')['Close'].last()
@@ -35,8 +32,8 @@ def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     months = sorted(month_last_price.index)
 
     for i in range(1, len(months)):
-        prev_price = month_last_price.iloc[i-1]
-        curr_price = month_last_price.iloc[i]
+        prev_price = month_last_price[months[i-1]]
+        curr_price = month_last_price[months[i]]
         pct_change = (curr_price - prev_price) / prev_price * 100
 
         if pct_change >= 10:
@@ -54,35 +51,51 @@ def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     labels_df = pd.DataFrame(labels, columns=['Month', 'Label'])
 
     # Step 5: Merge labels onto main df
-    # Before merging, convert Period to string in both DataFrames
+    # Convert Month to string format for merging
     df['Month'] = df['Month'].astype(str)
     labels_df['Month'] = labels_df['Month'].astype(str)
 
     # Now merge
     df = df.merge(labels_df, on='Month', how='inner')
 
-    # Step 6: Add technical indicators (ensure they support monthly frequency)
+    # Step 6: Add technical indicators
     df = functions.add_technical_indicators(df)
 
     # Step 7: Prepare X and y
     X = df[feature_cols]
     y = df['Label']
+    
+    # Print the number of samples for debugging
+    print(f"Monthly analysis: {len(X)} samples after preprocessing")
+    
+    # Check if we have enough data
+    if len(X) < 10:
+        print(f"Warning: Only {len(X)} samples available for monthly analysis - results may be unreliable")
 
     # Step 8: Normalize features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     X_scaled = pd.DataFrame(X_scaled, columns=feature_cols, index=X.index)
 
-    # Step 9: Split data
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X_scaled, y, test_size=0.3, random_state=42, shuffle=True
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=2/3, random_state=42, shuffle=True
-    )
+    # Step 9: Split data with adjusted ratios for smaller datasets
+    if len(X) < 30:  # For very small datasets
+        # Use a simpler split - 70% train, 30% test (no validation)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_scaled, y, test_size=0.3, random_state=42, shuffle=True
+        )
+        # Make validation set equal to test set for consistency in return values
+        X_val, y_val = X_test.copy(), y_test.copy()
+    else:
+        # Normal split for larger datasets
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X_scaled, y, test_size=0.3, random_state=42, shuffle=True
+        )
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.5, random_state=42, shuffle=True
+        )
 
     # ===============================================================
-    # Step 9: Train model
+    # Step 10: Train model
     # ===============================================================
     model = None
 
@@ -107,7 +120,6 @@ def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     elif model_index == "9":
         model = ExtraTreesClassifier(n_estimators=100, max_depth=None)
 
-    # model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
 
     # Step 11: Validation
@@ -118,4 +130,5 @@ def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     y_test_pred = model.predict(X_test)
     test_acc = accuracy_score(y_test, y_test_pred)
 
-    return val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred
+    # Return values in consistent order with day.py and hr.py
+    return model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df
