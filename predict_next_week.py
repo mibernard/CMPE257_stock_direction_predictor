@@ -8,7 +8,7 @@ def predict_next_week_prices(model, df, feature_cols, window_size=120):
     recent_df = df.copy()
     trading_hours_per_day = 7
 
-    for day in range(7):
+    for day in range(5):
         for hour in range(trading_hours_per_day):
             recent_window = recent_df.iloc[-window_size:]
             X_new = recent_window[feature_cols].values.flatten().reshape(1, -1)
