@@ -1,3 +1,4 @@
+from PyQt6.QtGui import QIcon
 import sys
 import os
 
@@ -16,9 +17,11 @@ from models.predictor import PredictorModel
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
         self.setWindowTitle("Stock Direction Predictor")
         self.setMinimumSize(1200, 800)
-        
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "logo.ico")
+        self.setWindowIcon(QIcon(icon_path))
         # Set up style
         self.setStyleSheet("""
             QMainWindow, QWidget {
