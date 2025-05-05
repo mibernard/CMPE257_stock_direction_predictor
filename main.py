@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import threading
 import time
+import os
+import matplotlib.dates as mdates
+from PIL import Image, ImageTk  # For handling the logo image
 
 import yfinance
 
@@ -70,6 +73,12 @@ def create_ui():
     window.geometry("1400x800")
     window.title("S&P 500 Stock Selector")
     window.resizable(True, True)
+    
+    # Set window icon
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
+    if os.path.exists(icon_path):
+        window.iconbitmap(icon_path)
+    
     chart_type = ctk.StringVar(value="line")  # 默认折线图
 
     def plot_chart(df, parent_frame):
@@ -79,11 +88,30 @@ def create_ui():
 
         if chart_type.get() == "line":
             fig, ax = plt.subplots(figsize=(8, 4))
+            
+            # Convert datetime to proper datetime objects if they're not already
+            if not pd.api.types.is_datetime64_any_dtype(df['Datetime']):
+                df['Datetime'] = pd.to_datetime(df['Datetime'])
+            
+            # Use explicit datetime objects for plotting instead of timestamps
             ax.plot(df['Datetime'], df['Close'], label="Close Price", color="blue")
             ax.set_title("Close Price Over Time")
             ax.set_xlabel("Date")
             ax.set_ylabel("Price")
-            ax.tick_params(axis='x', labelrotation=45)
+            
+            # Format x-axis to display dates properly
+            fig.autofmt_xdate()  # Auto-format dates
+            
+            # Format dates with a formatter that disables scientific notation
+            date_format = mdates.DateFormatter('%Y-%m-%d')
+            ax.xaxis.set_major_formatter(date_format)
+            
+            # Disable scientific notation on the x-axis
+            ax.ticklabel_format(useOffset=False, style='plain', axis='x')
+            
+            # Adjust rotation for better visibility
+            plt.xticks(rotation=45)
+            
             ax.legend()
         else:
             df_candle = df.set_index("Datetime")[["Open", "High", "Low", "Close"]].tail(500)
@@ -100,6 +128,23 @@ def create_ui():
     frame_home = ctk.CTkFrame(window, fg_color="transparent")
     frame_home.pack(expand=True, fill="both")
 
+    # Add logo at the top of the home page
+    logo_frame = ctk.CTkFrame(frame_home, fg_color="transparent")
+    logo_frame.pack(pady=10)
+    
+    try:
+        # Try to add the logo image to the home page
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
+        if os.path.exists(icon_path):
+            # CustomTkinter doesn't support .ico files directly for CTkImage, 
+            # but we can use PIL to open the ico and convert it
+            pil_image = Image.open(icon_path)
+            ctk_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(100, 100))
+            logo_label = ctk.CTkLabel(logo_frame, image=ctk_image, text="")
+            logo_label.pack(pady=10)
+    except Exception as e:
+        print(f"Error loading logo image: {e}")
+
     welcome_label = ctk.CTkLabel(frame_home, text="Welcome to S&P 500 Stock Direction Predictor", font=("Arial", 28))
     welcome_label.pack(pady=20)
 
@@ -109,7 +154,37 @@ def create_ui():
 
     sp500_tickers = get_sp500_tickers()
 
-    stock_menu = ctk.CTkOptionMenu(frame_home, values=sp500_tickers, font=("Arial", 16))
+    # Create dropdown with visible arrow
+    stock_menu = ctk.CTkOptionMenu(
+        frame_home, 
+        values=sp500_tickers, 
+        font=("Arial", 16),
+        dropdown_font=("Arial", 14),
+        fg_color="white",            # Background color
+        button_color="#e0e0e0",      # Button color
+        button_hover_color="#d0d0d0", # Button hover color
+        text_color="black",          # Text color
+        dropdown_fg_color="white",   # Dropdown background color
+        dropdown_text_color="black", # Dropdown text color
+        dropdown_hover_color="#e0e0e0", # Dropdown hover color
+        border_color="#aaaaaa",      # Border color for outline
+        border_width=1,             # Border width for visible outline
+        # Make sure dropdown is wide enough
+        width=220,
+        # Use a visible icon for the arrow
+        dropdown_icon=ctk.CTkImage(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+    )
+    # Add a label with down arrow manually
+    arrow_label = ctk.CTkLabel(
+        stock_menu, 
+        text="▼", 
+        font=("Arial", 9),
+        text_color="black",
+        bg_color="#e0e0e0"
+    )
+    # Position the arrow at the right side of the dropdown
+    arrow_label.place(relx=0.92, rely=0.5, anchor="center")
+    
     stock_menu.pack(pady=20)
 
     next_button = ctk.CTkButton(frame_home, text="Next", font=("Arial", 16))
@@ -142,7 +217,7 @@ def create_ui():
     sma_checkbox = ctk.CTkCheckBox(frame_options, text="SMA", variable=sma_var, font=("Arial", 16))
     sma_checkbox.pack(pady=5)
     CreateToolTip(sma_checkbox,
-                  "SMA: Simple Moving Average\nA simple average of a stock’s price over a specific period.")
+                  "SMA: Simple Moving Average\nA simple average of a stock's price over a specific period.")
 
     # EMA
     ema_checkbox = ctk.CTkCheckBox(frame_options, text="EMA", variable=ema_var, font=("Arial", 16))

@@ -1,9 +1,68 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QComboBox, 
                              QPushButton, QHBoxLayout, QSpacerItem, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap, QIcon
+from PyQt6.QtGui import QFont, QPixmap, QIcon, QPainter, QColor, QPen
+import os
 
 from models.stock_data import StockDataModel
+
+# Custom ComboBox with a visible down arrow
+class ArrowComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("""
+            QComboBox {
+                border: 1px solid #aaaaaa;
+                border-radius: 3px;
+                padding: 5px;
+                padding-right: 20px;  /* Space for arrow */
+                background-color: white;
+                color: #333333;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #aaaaaa;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+            }
+            QComboBox QAbstractItemView {
+                border: 1px solid #aaaaaa;
+                selection-background-color: #4a86e8;
+                selection-color: white;
+                background-color: white;
+            }
+        """)
+    
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        
+        # Draw the triangle
+        painter = QPainter(self)
+        painter.setPen(QPen(QColor("#333333")))
+        painter.setBrush(QColor("#333333"))
+        
+        # Calculate position for the triangle
+        width = self.width()
+        height = self.height()
+        
+        # Define triangle points for a down arrow
+        triangle_size = 8
+        x = width - 15  # Position from right edge
+        y = height // 2  # Vertical center
+        
+        # Draw a filled triangle pointing down
+        points = [
+            (x, y - triangle_size//2),
+            (x + triangle_size, y - triangle_size//2),
+            (x + triangle_size//2, y + triangle_size//2)
+        ]
+        
+        # Convert points to QPoint objects and draw polygon
+        from PyQt6.QtCore import QPoint
+        qpoints = [QPoint(p[0], p[1]) for p in points]
+        painter.drawPolygon(qpoints)
 
 class HomeView(QWidget):
     # Signal when stock is selected and next is clicked
@@ -20,11 +79,31 @@ class HomeView(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(20)
         
+        # Add logo at the top
+        layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        
+        # Logo
+        logo_layout = QHBoxLayout()
+        logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Create a label for the logo
+        logo_label = QLabel()
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "logo.ico")
+        if os.path.exists(icon_path):
+            # Set the logo image with proper scaling
+            icon = QIcon(icon_path)
+            pixmap = icon.pixmap(100, 100)
+            logo_label.setPixmap(pixmap)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo_layout.addWidget(logo_label)
+        
+        layout.addLayout(logo_layout)
+        
         # Title
         title_label = QLabel("S&P 500 Stock Direction Predictor")
         title_label.setFont(QFont("Arial", 28, QFont.Weight.Bold))
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed))
         layout.addWidget(title_label)
         
         # Description
@@ -42,9 +121,11 @@ class HomeView(QWidget):
         stock_label.setFont(QFont("Arial", 14))
         stock_layout.addWidget(stock_label)
         
-        self.stock_combo = QComboBox()
+        # Use our custom ComboBox
+        self.stock_combo = ArrowComboBox()
         self.stock_combo.setMinimumWidth(200)
         self.stock_combo.setFont(QFont("Arial", 14))
+        
         # Load S&P 500 tickers
         self.load_tickers()
         stock_layout.addWidget(self.stock_combo)

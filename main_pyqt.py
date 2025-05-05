@@ -20,8 +20,12 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Stock Direction Predictor")
         self.setMinimumSize(1200, 800)
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "logo.ico")
-        self.setWindowIcon(QIcon(icon_path))
+        
+        # Set application icon
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
         # Set up style
         self.setStyleSheet("""
             QMainWindow, QWidget {
@@ -134,6 +138,11 @@ class MainWindow(QMainWindow):
 def main():
     # Create the application
     app = QApplication(sys.argv)
+    
+    # Set application icon at the app level too
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
     
     # Create and show the main window
     window = MainWindow()
