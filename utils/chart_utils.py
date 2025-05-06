@@ -1,6 +1,7 @@
 import pyqtgraph as pg
 import numpy as np
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QMainWindow
 import sys
 import traceback
 import datetime
@@ -26,6 +27,15 @@ class TimeAxisItem(pg.AxisItem):
                 strings.append('')
         return strings
 
+def get_main_window(widget):
+    """Find the main window from any widget"""
+    parent = widget
+    while parent is not None:
+        if isinstance(parent, QMainWindow):
+            return parent
+        parent = parent.parent()
+    return None
+
 def create_line_chart(df, parent=None):
     """Create a line chart for stock price data"""
     # Make sure the Datetime column is in proper datetime format
@@ -35,18 +45,30 @@ def create_line_chart(df, parent=None):
     # Configure the plot with custom time axis
     axis = TimeAxisItem(orientation='bottom')
     plot_widget = pg.PlotWidget(parent=parent, axisItems={'bottom': axis})
-    plot_widget.setBackground('w')
     
-    # Set axis styles with black text
-    label_style = {'color': '#000000', 'font-size': '12pt'}
-    axis_style = {'color': '#000000', 'font-size': '10pt'}
+    # Check if dark mode is enabled
+    dark_mode = False
+    main_window = get_main_window(parent) if parent else None
+    if main_window and hasattr(main_window, 'dark_mode'):
+        dark_mode = main_window.dark_mode
+    
+    # Set background and text colors based on theme
+    if dark_mode:
+        plot_widget.setBackground('#2d2d2d')
+        text_color = '#f5f5f5'
+    else:
+        plot_widget.setBackground('w')
+        text_color = '#000000'
+    
+    # Set axis styles with theme-appropriate text color
+    label_style = {'color': text_color, 'font-size': '12pt'}
     
     plot_widget.setLabel('left', 'Price', units='$', **label_style)
     # Date label is set in the TimeAxisItem
     
     # Style the axes
-    plot_widget.getAxis('left').setTextPen('k')  # Black text
-    plot_widget.getAxis('bottom').setTextPen('k')  # Black text
+    plot_widget.getAxis('left').setTextPen(text_color)
+    plot_widget.getAxis('bottom').setTextPen(text_color)
     
     # Convert datetime to timestamps for x-axis
     timestamps = df['Datetime'].astype(np.int64) // 10**9
@@ -84,18 +106,30 @@ def create_candlestick_chart(df, parent=None):
         # Configure the plot with custom time axis
         axis = TimeAxisItem(orientation='bottom')
         plot_widget = pg.PlotWidget(parent=parent, axisItems={'bottom': axis})
-        plot_widget.setBackground('w')
         
-        # Set axis styles with black text
-        label_style = {'color': '#000000', 'font-size': '12pt'}
-        axis_style = {'color': '#000000', 'font-size': '10pt'}
+        # Check if dark mode is enabled
+        dark_mode = False
+        main_window = get_main_window(parent) if parent else None
+        if main_window and hasattr(main_window, 'dark_mode'):
+            dark_mode = main_window.dark_mode
+        
+        # Set background and text colors based on theme
+        if dark_mode:
+            plot_widget.setBackground('#2d2d2d')
+            text_color = '#f5f5f5'
+        else:
+            plot_widget.setBackground('w')
+            text_color = '#000000'
+        
+        # Set axis styles with theme-appropriate text color
+        label_style = {'color': text_color, 'font-size': '12pt'}
         
         plot_widget.setLabel('left', 'Price', units='$', **label_style)
         # Date label is set in the TimeAxisItem
         
         # Style the axes
-        plot_widget.getAxis('left').setTextPen('k')  # Black text
-        plot_widget.getAxis('bottom').setTextPen('k')  # Black text
+        plot_widget.getAxis('left').setTextPen(text_color)
+        plot_widget.getAxis('bottom').setTextPen(text_color)
         
         # Explicitly disable scientific notation on y-axis
         plot_widget.getAxis('left').enableAutoSIPrefix(False)

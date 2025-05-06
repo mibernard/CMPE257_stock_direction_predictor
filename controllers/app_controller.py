@@ -6,6 +6,7 @@ class AppController(QObject):
     # Signal to update UI with model results
     analysis_complete = pyqtSignal(object)
     analysis_started = pyqtSignal()
+    theme_changed = pyqtSignal()  # Signal for theme changes
     
     def __init__(self, main_window):
         super().__init__()

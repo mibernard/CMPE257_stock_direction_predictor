@@ -20,6 +20,9 @@ class ResultsView(QWidget):
         # Connect to controller's analysis_complete signal
         self.controller.analysis_complete.connect(self.display_results)
         
+        # Connect to theme changed signal
+        self.controller.theme_changed.connect(self.refresh_chart)
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -291,4 +294,9 @@ class ResultsView(QWidget):
             if widget:
                 widget.setParent(None)
                 
-        self.chart_title.setText("Stock Price Chart") 
+        self.chart_title.setText("Stock Price Chart")
+        
+    def refresh_chart(self):
+        """Refresh the current chart to apply theme changes"""
+        if self.current_results and 'df' in self.current_results and self.current_results['df'] is not None:
+            self.display_chart(self.current_results['df']) 
