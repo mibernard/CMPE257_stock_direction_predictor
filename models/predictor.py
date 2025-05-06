@@ -83,7 +83,8 @@ class PredictorModel(QObject):
                 'y_val_pred': result[4],
                 'y_test': result[5],
                 'y_test_pred': result[6],
-                'df': result[7] if len(result) > 7 else None
+                'df': result[7] if len(result) > 7 else None,
+                'feature_cols': feature_cols  # Add feature columns to results
             }
             
         except Exception as e:

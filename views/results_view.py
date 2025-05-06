@@ -137,6 +137,13 @@ class ResultsView(QWidget):
         # Store results for chart switching
         self.current_results = results
         
+        print("\n=== RECEIVED RESULTS ===")
+        print(f"Status: {results.get('status')}")
+        print(f"Keys in results: {list(results.keys())}")
+        print(f"Model type: {results.get('model_type')}")
+        print(f"Model present: {'Yes' if 'model' in results and results['model'] is not None else 'No'}")
+        print(f"Feature columns: {results.get('feature_cols')}")
+        
         if results['status'] == 'error':
             # Show error message
             self.results_title.setText(f"Error: {results['message']}")
@@ -168,7 +175,10 @@ class ResultsView(QWidget):
             
         # Display chart if data is available
         df = results.get('df')
+        print(f"DataFrame present: {'Yes' if df is not None else 'No'}")
         if df is not None:
+            print(f"DataFrame shape: {df.shape}")
+            print(f"DataFrame columns: {df.columns.tolist()}")
             self.display_chart(df)
             # Enable chart buttons
             self.line_chart_btn.setEnabled(True)
@@ -222,21 +232,86 @@ class ResultsView(QWidget):
     def display_chart(self, df):
         """Display chart based on current chart type"""
         try:
+            print("\n=== DISPLAYING CHART ===")
+            
             # Clear the current chart
             for i in reversed(range(self.chart_layout.count())): 
                 widget = self.chart_layout.itemAt(i).widget()
                 if widget:
                     widget.setParent(None)
+            
+            print("Cleared previous chart")
                 
+            # Get model and feature columns from current results if available
+            model = None
+            feature_cols = None
+            
+            if self.current_results:
+                model = self.current_results.get('model')
+                print(f"Model retrieved: {type(model).__name__ if model else 'None'}")
+                
+                # Get feature columns - either from the results directly or derive from indicators
+                if 'feature_cols' in self.current_results:
+                    feature_cols = self.current_results['feature_cols']
+                    print(f"Using feature columns from results: {feature_cols}")
+                elif 'indicators' in self.current_results:
+                    # Derive feature columns from indicators
+                    feature_cols = ["Open", "High", "Low", "Close", "Volume"]
+                    indicators = self.current_results['indicators']
+                    
+                    # Add technical indicators to feature columns
+                    if "SMA" in indicators:
+                        feature_cols.append("SMA")
+                    if "EMA" in indicators:
+                        feature_cols.append("EMA")
+                    if "WMA" in indicators:
+                        feature_cols.append("WMA")
+                    if "RSI" in indicators:
+                        feature_cols.append("RSI")
+                    if "MACD" in indicators:
+                        feature_cols.extend(["MACD", "MACD_Signal"])
+                    print(f"Derived feature columns from indicators: {feature_cols}")
+                else:
+                    print("No feature columns found in results")
+            
+            # Check for model and features
+            has_prediction = model is not None and feature_cols is not None
+            prediction_text = " with Predictions" if has_prediction else ""
+            print(f"Can show predictions: {has_prediction}")
+            
             # Update chart title based on type    
             if self.chart_type == "line":
-                self.chart_title.setText("Stock Price Line Chart")
-                chart = create_line_chart(df, parent=self.chart_container)
+                self.chart_title.setText(f"Stock Price Line Chart{prediction_text}")
+                print("Creating line chart...")
+                chart = create_line_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
+                print("Line chart created")
             else:
-                self.chart_title.setText("Stock Price OHLC Chart")
-                chart = create_candlestick_chart(df, parent=self.chart_container)
-                
+                self.chart_title.setText(f"Stock Price OHLC Chart{prediction_text}")
+                print("Creating OHLC chart...")
+                chart = create_candlestick_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
+                print("OHLC chart created")
+            
+            # Add the chart to the layout
             self.chart_layout.addWidget(chart)
+            print("Chart added to layout")
+            
+            # Add explanation for predictions if they're shown
+            if has_prediction:
+                # Add prediction explanation label below the chart
+                explanation = QLabel()
+                explanation.setWordWrap(True)
+                explanation.setStyleSheet("padding: 5px; background-color: rgba(240, 240, 240, 0.5); border-radius: 5px;")
+                explanation.setText(
+                    "📊 <b>Prediction Details:</b> The dashed line shows predicted future prices based on "
+                    f"the {self.current_results.get('model_type', 'selected')} model. "
+                    "Green indicates predicted price increase, red indicates predicted decrease. "
+                    "<b>The shaded area represents the 95% confidence interval</b> - the range within which "
+                    "the actual price is likely to fall based on historical volatility. "
+                    "<i>Note: These predictions should be considered as just one of many factors in investment decisions.</i>"
+                )
+                self.chart_layout.addWidget(explanation)
+                print("Added prediction explanation")
+            
         except Exception as e:
             import traceback
             print(f"Error displaying chart: {e}")
