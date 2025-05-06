@@ -72,6 +72,12 @@ class ResultsView(QWidget):
         self.test_report_text.setReadOnly(True)
         self.reports_tabs.addTab(self.test_report_text, "Test Report")
         
+        # Future predictions tab
+        self.predictions_text = QTextEdit()
+        self.predictions_text.setFont(QFont("Courier", 11))
+        self.predictions_text.setReadOnly(True)
+        self.reports_tabs.addTab(self.predictions_text, "Future Predictions")
+        
         left_layout.addWidget(self.reports_tabs)
         
         # Chart controls
@@ -172,6 +178,9 @@ class ResultsView(QWidget):
         if y_test is not None and y_test_pred is not None:
             test_report = classification_report(y_test, y_test_pred, output_dict=True, zero_division=0)
             self.display_classification_report(test_report, self.test_report_text)
+            
+        # Display raw prediction results
+        self.display_raw_predictions(y_val, y_val_pred, y_test, y_test_pred)
             
         # Display chart if data is available
         df = results.get('df')
@@ -283,13 +292,19 @@ class ResultsView(QWidget):
             if self.chart_type == "line":
                 self.chart_title.setText(f"Stock Price Line Chart{prediction_text}")
                 print("Creating line chart...")
-                chart = create_line_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
+                chart, prediction_data = create_line_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
                 print("Line chart created")
             else:
                 self.chart_title.setText(f"Stock Price OHLC Chart{prediction_text}")
                 print("Creating OHLC chart...")
-                chart = create_candlestick_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
+                chart, prediction_data = create_candlestick_chart(df, parent=self.chart_container, model=model, feature_cols=feature_cols)
                 print("OHLC chart created")
+            
+            # Store prediction data for the raw predictions tab
+            if 'has_predictions' in prediction_data and prediction_data['has_predictions']:
+                self.current_results['prediction_data'] = prediction_data
+                # Update the raw predictions display
+                self.display_future_predictions(prediction_data)
             
             # Add the chart to the layout
             self.chart_layout.addWidget(chart)
@@ -302,7 +317,7 @@ class ResultsView(QWidget):
                 explanation.setWordWrap(True)
                 explanation.setStyleSheet("padding: 5px; background-color: rgba(240, 240, 240, 0.5); border-radius: 5px;")
                 explanation.setText(
-                    "📊 <b>Prediction Details:</b> The dashed line shows predicted future prices based on "
+                    "<b>Prediction Details:</b> The dashed line shows predicted future prices based on "
                     f"the {self.current_results.get('model_type', 'selected')} model. "
                     "Green indicates predicted price increase, red indicates predicted decrease. "
                     "<b>The shaded area represents the 95% confidence interval</b> - the range within which "
@@ -362,6 +377,8 @@ class ResultsView(QWidget):
         self.test_accuracy_label.setText("Test Accuracy: ")
         self.val_report_text.clear()
         self.test_report_text.clear()
+        self.predictions_text.clear()
+        self.predictions_text.setText("Future predictions will appear here after analysis.")
         
         # Clear chart
         for i in reversed(range(self.chart_layout.count())): 
@@ -374,4 +391,225 @@ class ResultsView(QWidget):
     def refresh_chart(self):
         """Refresh the current chart to apply theme changes"""
         if self.current_results and 'df' in self.current_results and self.current_results['df'] is not None:
-            self.display_chart(self.current_results['df']) 
+            self.display_chart(self.current_results['df'])
+            
+    def display_raw_predictions(self, y_val=None, y_val_pred=None, y_test=None, y_test_pred=None):
+        """Display the raw predictions alongside true values"""
+        self.predictions_text.clear()
+        
+        # Create a text display showing actual vs. predicted values in a table format
+        prediction_text = "Raw Model Predictions\n\n"
+        
+        # Get the dataset if available to extract dates
+        df = None
+        if self.current_results and 'df' in self.current_results:
+            df = self.current_results.get('df')
+        
+        # Try to determine if date information is available
+        has_dates = df is not None and 'Datetime' in df.columns
+        date_format = '%Y-%m-%d'
+        
+        # Convert pandas Series to numpy arrays if needed
+        import numpy as np
+        import pandas as pd
+        
+        # Safely convert data to numpy arrays for consistent access
+        if y_val is not None:
+            if isinstance(y_val, pd.Series):
+                y_val = y_val.values
+            elif not isinstance(y_val, (list, np.ndarray)):
+                y_val = np.array([y_val])
+                
+        if y_val_pred is not None:
+            if isinstance(y_val_pred, pd.Series):
+                y_val_pred = y_val_pred.values
+            elif not isinstance(y_val_pred, (list, np.ndarray)):
+                y_val_pred = np.array([y_val_pred])
+                
+        if y_test is not None:
+            if isinstance(y_test, pd.Series):
+                y_test = y_test.values
+            elif not isinstance(y_test, (list, np.ndarray)):
+                y_test = np.array([y_test])
+                
+        if y_test_pred is not None:
+            if isinstance(y_test_pred, pd.Series):
+                y_test_pred = y_test_pred.values
+            elif not isinstance(y_test_pred, (list, np.ndarray)):
+                y_test_pred = np.array([y_test_pred])
+        
+        if y_val is not None and y_val_pred is not None:
+            # Display validation set predictions
+            prediction_text += "Validation Set Results:\n"
+            if has_dates:
+                prediction_text += f"{'Index':<6}{'Date':<12}{'True':<8}{'Predicted':<9}{'Match':<6}\n"
+                prediction_text += "-" * 42 + "\n"
+            else:
+                prediction_text += f"{'Index':<8}{'True':<10}{'Predicted':<10}{'Match':<10}\n"
+                prediction_text += "-" * 38 + "\n"
+            
+            # Show at most 50 samples to avoid too much text
+            val_samples = min(50, len(y_val))
+            for i in range(val_samples):
+                try:
+                    true_val = y_val[i]
+                    pred_val = y_val_pred[i]
+                    matches = true_val == pred_val
+                    match_symbol = "✓" if matches else "✗"
+                    
+                    if has_dates and i < len(df):
+                        try:
+                            # Try to get the date for this prediction
+                            date_str = pd.to_datetime(df['Datetime'].iloc[i]).strftime(date_format)
+                            prediction_text += f"{i:<6}{date_str:<12}{true_val:<8}{pred_val:<9}{match_symbol:<6}\n"
+                        except Exception as e:
+                            # Fall back if date formatting fails
+                            prediction_text += f"{i:<8}{true_val:<10}{pred_val:<10}{match_symbol:<10}\n"
+                    else:
+                        prediction_text += f"{i:<8}{true_val:<10}{pred_val:<10}{match_symbol:<10}\n"
+                except Exception as e:
+                    prediction_text += f"{i:<8}{'Error accessing data':<30}\n"
+            
+            if len(y_val) > val_samples:
+                prediction_text += f"... {len(y_val) - val_samples} more rows ...\n"
+            
+            prediction_text += "\n"
+            
+        if y_test is not None and y_test_pred is not None:
+            # Display test set predictions
+            prediction_text += "Test Set Results:\n"
+            if has_dates:
+                prediction_text += f"{'Index':<6}{'Date':<12}{'True':<8}{'Predicted':<9}{'Match':<6}\n"
+                prediction_text += "-" * 42 + "\n"
+            else:
+                prediction_text += f"{'Index':<8}{'True':<10}{'Predicted':<10}{'Match':<10}\n"
+                prediction_text += "-" * 38 + "\n"
+            
+            # Show at most 50 samples to avoid too much text
+            test_samples = min(50, len(y_test))
+            for i in range(test_samples):
+                try:
+                    true_val = y_test[i]
+                    pred_val = y_test_pred[i]
+                    matches = true_val == pred_val
+                    match_symbol = "✓" if matches else "✗"
+                    
+                    # For test data, usually the indices are at the end of the dataframe
+                    if has_dates and df is not None:
+                        try:
+                            # Test data is typically at the end of the dataset
+                            offset = len(df) - len(y_test)
+                            if offset >= 0 and i + offset < len(df):
+                                date_str = pd.to_datetime(df['Datetime'].iloc[i + offset]).strftime(date_format)
+                                prediction_text += f"{i:<6}{date_str:<12}{true_val:<8}{pred_val:<9}{match_symbol:<6}\n"
+                            else:
+                                prediction_text += f"{i:<8}{true_val:<10}{pred_val:<10}{match_symbol:<10}\n"
+                        except Exception as e:
+                            prediction_text += f"{i:<8}{true_val:<10}{pred_val:<10}{match_symbol:<10}\n"
+                    else:
+                        prediction_text += f"{i:<8}{true_val:<10}{pred_val:<10}{match_symbol:<10}\n"
+                except Exception as e:
+                    prediction_text += f"{i:<8}{'Error accessing data':<30}\n"
+            
+            if len(y_test) > test_samples:
+                prediction_text += f"... {len(y_test) - test_samples} more rows ...\n"
+                
+        # Add summary statistics
+        try:
+            if y_val is not None and y_val_pred is not None:
+                val_correct = sum(y_val == y_val_pred)
+                val_total = len(y_val)
+                val_acc = val_correct / val_total * 100 if val_total > 0 else 0
+                prediction_text += f"\nValidation accuracy: {val_acc:.2f}% ({val_correct}/{val_total} correct)\n"
+                
+            if y_test is not None and y_test_pred is not None:
+                test_correct = sum(y_test == y_test_pred)
+                test_total = len(y_test)
+                test_acc = test_correct / test_total * 100 if test_total > 0 else 0
+                prediction_text += f"Test accuracy: {test_acc:.2f}% ({test_correct}/{test_total} correct)\n\n"
+        except Exception as e:
+            prediction_text += f"\nError calculating accuracy: {str(e)}\n\n"
+        
+        # Add a class legend
+        prediction_text += "Legend for Predictions:\n"
+        model_type = getattr(self, 'current_results', {}).get('model_type', 'Unknown')
+        if 'random forest' in model_type.lower() or 'decision tree' in model_type.lower() or 'classification' in model_type.lower():
+            prediction_text += "Classes are typically:\n"
+            prediction_text += "0: Strong Positive / Uptrend\n"
+            prediction_text += "1: Moderate Positive\n"
+            prediction_text += "2: Neutral\n"
+            prediction_text += "3: Moderate Negative\n"
+            prediction_text += "4: Strong Negative / Downtrend\n"
+                
+        self.predictions_text.setText(prediction_text)
+
+    def display_future_predictions(self, prediction_data):
+        """Display the future price predictions in the raw predictions tab"""
+        self.predictions_text.clear()
+        
+        if not prediction_data or not prediction_data.get('has_predictions', False):
+            self.predictions_text.setText("No future predictions available.")
+            return
+            
+        # Create a text display showing future prediction data
+        prediction_text = "Future Price Predictions\n\n"
+        
+        # Get prediction direction and change percentage
+        direction = prediction_data.get('direction', 'unknown')
+        change_pct = prediction_data.get('prediction_change_pct', 0.0)
+        last_price = prediction_data.get('last_known_price', 0.0)
+        last_date = prediction_data.get('last_known_date', None)
+        
+        # Add a summary header
+        if direction == 'up':
+            prediction_text += f"PREDICTION: PRICE WILL LIKELY INCREASE BY {change_pct:.2f}% \n\n"
+        else:
+            prediction_text += f"PREDICTION: PRICE WILL LIKELY DECREASE BY {abs(change_pct):.2f}% \n\n"
+            
+        # Add last known price
+        if last_date:
+            prediction_text += f"Last known price on {last_date.strftime('%Y-%m-%d %H:%M')}: ${last_price:.2f}\n\n"
+        else:
+            prediction_text += f"Last known price: ${last_price:.2f}\n\n"
+            
+        # Create a table of predictions
+        prediction_text += f"{'Date':<16}{'Predicted':<12}{'Change %':<10}{'Lower 95%':<12}{'Upper 95%':<12}\n"
+        prediction_text += "-" * 62 + "\n"
+        
+        # Get the prediction data
+        future_dates = prediction_data.get('future_dates', [])
+        future_prices = prediction_data.get('future_prices', [])
+        lower_prices = prediction_data.get('lower_prices', [])
+        upper_prices = prediction_data.get('upper_prices', [])
+        
+        # Format the prediction data into a table
+        for i in range(len(future_dates)):
+            date_str = future_dates[i].strftime('%Y-%m-%d %H:%M')
+            price = future_prices[i]
+            pct_change = ((price / last_price) - 1) * 100
+            lower = lower_prices[i]
+            upper = upper_prices[i]
+            
+            # Format with colors (using ASCII color codes for simplicity)
+            if pct_change >= 0:
+                # Green for positive
+                prediction_text += f"{date_str:<16}${price:<10.2f} +{pct_change:<8.2f}% ${lower:<10.2f} ${upper:<10.2f}\n"
+            else:
+                # Red for negative
+                prediction_text += f"{date_str:<16}${price:<10.2f} {pct_change:<9.2f}% ${lower:<10.2f} ${upper:<10.2f}\n"
+                
+        # Add volatility information and disclaimer
+        prediction_text += "\n\nThese predictions are based on:"
+        prediction_text += "\n• Historical price patterns and volatility"
+        prediction_text += "\n• Machine learning model trend direction"
+        prediction_text += "\n• Statistical confidence intervals (95%)"
+        
+        if 'model_type' in self.current_results:
+            model_type = self.current_results.get('model_type')
+            prediction_text += f"\n\nModel used: {model_type}"
+            
+        prediction_text += "\n\nDisclaimer: These predictions are not financial advice."
+        prediction_text += "\nPast performance is not indicative of future results."
+        prediction_text += "\nActual prices may vary significantly from these projections."
+        
+        self.predictions_text.setText(prediction_text) 

@@ -300,7 +300,11 @@ def calculate_historical_trend(df):
         return 0.0
 
 def create_line_chart(df, parent=None, model=None, feature_cols=None):
-    """Create a line chart for stock price data with future predictions"""
+    """Create a line chart for stock price data with future predictions
+    
+    Returns:
+        tuple: (chart_widget, prediction_data) where prediction_data is a dict with future predictions
+    """
     # Make sure the Datetime column is in proper datetime format
     if not pd.api.types.is_datetime64_any_dtype(df['Datetime']):
         df['Datetime'] = pd.to_datetime(df['Datetime'])
@@ -340,6 +344,20 @@ def create_line_chart(df, parent=None, model=None, feature_cols=None):
     pen = pg.mkPen(color=(0, 100, 200), width=2)
     plot_widget.plot(timestamps, df['Close'].values, pen=pen, name="Close Price")
     
+    # Initialize prediction data to return
+    prediction_data = {
+        'has_predictions': False,
+        'future_dates': [],
+        'future_prices': [],
+        'upper_prices': [],
+        'lower_prices': [],
+        'last_known_price': None,
+        'prediction_change': None,
+        'prediction_change_pct': None,
+        'direction': None,
+        'confidence_intervals': []
+    }
+    
     # Add future predictions if model is provided
     if model is not None and feature_cols is not None:
         try:
@@ -369,8 +387,27 @@ def create_line_chart(df, parent=None, model=None, feature_cols=None):
                     
                     # Determine prediction direction (up or down)
                     prediction_change = future_prices[-1] - last_known_price
+                    prediction_change_pct = prediction_change / last_known_price * 100
                     print(f"Last known price: ${last_known_price:.2f}, Final prediction: ${future_prices[-1]:.2f}")
-                    print(f"Prediction change: {prediction_change:.2f} ({prediction_change/last_known_price*100:.2f}%)")
+                    print(f"Prediction change: {prediction_change:.2f} ({prediction_change_pct:.2f}%)")
+                    
+                    # Store prediction data to return
+                    prediction_data = {
+                        'has_predictions': True,
+                        'future_dates': future_dates,
+                        'future_prices': future_prices,
+                        'upper_prices': upper_prices,
+                        'lower_prices': lower_prices,
+                        'last_known_date': pd.to_datetime(df['Datetime'].iloc[-1]),
+                        'last_known_price': last_known_price,
+                        'prediction_change': prediction_change,
+                        'prediction_change_pct': prediction_change_pct,
+                        'direction': 'up' if prediction_change > 0 else 'down',
+                        'confidence_intervals': [
+                            (future_dates[i], lower_prices[i], future_prices[i], upper_prices[i])
+                            for i in range(len(future_dates))
+                        ]
+                    }
                     
                     # Set color based on prediction direction
                     if prediction_change > 0:
@@ -507,10 +544,14 @@ def create_line_chart(df, parent=None, model=None, feature_cols=None):
     # Explicitly disable scientific notation on y-axis
     plot_widget.getAxis('left').enableAutoSIPrefix(False)
     
-    return plot_widget
+    return plot_widget, prediction_data
 
 def create_candlestick_chart(df, parent=None, model=None, feature_cols=None):
-    """Create a simplified OHLC chart instead of candlesticks with future predictions"""
+    """Create a simplified OHLC chart instead of candlesticks with future predictions
+    
+    Returns:
+        tuple: (chart_widget, prediction_data) where prediction_data is a dict with future predictions
+    """
     try:
         print("Starting candlestick chart creation")
         print(f"DataFrame shape: {df.shape}")
@@ -599,6 +640,20 @@ def create_candlestick_chart(df, parent=None, model=None, feature_cols=None):
         )
         plot_widget.addItem(low_line)
         
+        # Initialize prediction data to return
+        prediction_data = {
+            'has_predictions': False,
+            'future_dates': [],
+            'future_prices': [],
+            'upper_prices': [],
+            'lower_prices': [],
+            'last_known_price': None,
+            'prediction_change': None,
+            'prediction_change_pct': None,
+            'direction': None,
+            'confidence_intervals': []
+        }
+        
         # Add future predictions if model is provided
         if model is not None and feature_cols is not None:
             try:
@@ -628,7 +683,26 @@ def create_candlestick_chart(df, parent=None, model=None, feature_cols=None):
                         
                         # Determine prediction direction (up or down)
                         prediction_change = future_prices[-1] - last_known_price
+                        prediction_change_pct = prediction_change / last_known_price * 100
                         print(f"OHLC chart - Last price: ${last_known_price:.2f}, Final prediction: ${future_prices[-1]:.2f}")
+                        
+                        # Store prediction data to return
+                        prediction_data = {
+                            'has_predictions': True,
+                            'future_dates': future_dates,
+                            'future_prices': future_prices,
+                            'upper_prices': upper_prices,
+                            'lower_prices': lower_prices,
+                            'last_known_date': pd.to_datetime(df['Datetime'].iloc[-1]),
+                            'last_known_price': last_known_price,
+                            'prediction_change': prediction_change,
+                            'prediction_change_pct': prediction_change_pct,
+                            'direction': 'up' if prediction_change > 0 else 'down',
+                            'confidence_intervals': [
+                                (future_dates[i], lower_prices[i], future_prices[i], upper_prices[i])
+                                for i in range(len(future_dates))
+                            ]
+                        }
                         
                         # Set color based on prediction direction
                         if prediction_change > 0:
@@ -757,7 +831,7 @@ def create_candlestick_chart(df, parent=None, model=None, feature_cols=None):
         plot_widget.showGrid(x=True, y=True, alpha=0.3)
         
         print("Successfully created OHLC chart")
-        return plot_widget
+        return plot_widget, prediction_data
     
     except Exception as e:
         print(f"Error creating OHLC chart: {e}")
