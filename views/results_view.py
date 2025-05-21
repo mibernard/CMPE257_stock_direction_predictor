@@ -1,8 +1,10 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, 
+import os
+
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton,
                              QHBoxLayout, QGroupBox, QTabWidget, QTextEdit,
                              QSplitter, QSpacerItem, QSizePolicy, QFrame)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap
 
 import pandas as pd
 import numpy as np
@@ -65,7 +67,29 @@ class ResultsView(QWidget):
         self.val_report_text.setFont(QFont("Courier", 11))
         self.val_report_text.setReadOnly(True)
         self.reports_tabs.addTab(self.val_report_text, "Validation Report")
-        
+
+        # Load and show Confusion Matrix image in a new tab
+        conf_matrix_tab = QWidget()
+        conf_layout = QVBoxLayout()
+
+        conf_label = QLabel("Confusion Matrix")
+        conf_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        conf_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        image_path = os.path.join(os.path.dirname(__file__), "../output/conf_matrix.png")
+        if os.path.exists(image_path):
+            pixmap = QPixmap(image_path)
+            img_label = QLabel()
+            img_label.setPixmap(pixmap.scaledToWidth(600, Qt.TransformationMode.SmoothTransformation))
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            conf_layout.addWidget(conf_label)
+            conf_layout.addWidget(img_label)
+        else:
+            conf_layout.addWidget(QLabel("Confusion matrix image not found."))
+
+        conf_matrix_tab.setLayout(conf_layout)
+        self.reports_tabs.addTab(conf_matrix_tab, "Confusion Matrix")
+
         # Test report
         self.test_report_text = QTextEdit()
         self.test_report_text.setFont(QFont("Courier", 11))

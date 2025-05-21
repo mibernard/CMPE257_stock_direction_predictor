@@ -14,6 +14,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from utils.visualize import save_confusion_matrix
 
 def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     # Step 1: Download historical data - MONTHLY (increase lookback to 10 years for monthly data)
@@ -131,4 +132,5 @@ def train_stock_month_classifier(ticker_symbol, feature_cols, model_index):
     test_acc = accuracy_score(y_test, y_test_pred)
 
     # Return values in consistent order with day.py and hr.py
+    save_confusion_matrix(y_test, y_test_pred, filename='output/conf_matrix.png')
     return model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df
