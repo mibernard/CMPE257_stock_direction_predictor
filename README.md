@@ -1,4 +1,4 @@
-# CMPE257_stock_direction_predictor
+# Stock Direction Predictor for CMPE 257: Machine Learning
 
 A stock direction prediction application using PyQt6 with MVC architecture.
 <img width="1430" alt="Screenshot 2025-05-29 at 12 22 14 PM" src="https://github.com/user-attachments/assets/0369861c-f587-4e78-83cf-725e960692ec" />
