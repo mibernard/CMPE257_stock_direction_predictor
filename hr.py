@@ -10,6 +10,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from utils.visualize import save_confusion_matrix
 
 def train_stock_hour_classifier(ticker_symbol, feature_cols, model_index):
 
@@ -113,4 +114,5 @@ def train_stock_hour_classifier(ticker_symbol, feature_cols, model_index):
     test_acc = accuracy_score(y_test, y_test_pred)
 
     # ✅ Step 11: Return model & df for UI visualization
+    save_confusion_matrix(y_test, y_test_pred, filename='output/conf_matrix.png')
     return model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df

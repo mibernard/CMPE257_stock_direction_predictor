@@ -10,6 +10,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from utils.visualize import save_confusion_matrix
 
 
 def train_stock_day_classifier(ticker_symbol, feature_cols, model_index):
@@ -100,5 +101,6 @@ def train_stock_day_classifier(ticker_symbol, feature_cols, model_index):
     y_test_pred = model.predict(X_test)
     test_acc = accuracy_score(y_test, y_test_pred)
 
+    save_confusion_matrix(y_test, y_test_pred, filename='output/conf_matrix.png')
     # Step 12: Return value
     return model, val_acc, test_acc, y_val, y_val_pred, y_test, y_test_pred, df
